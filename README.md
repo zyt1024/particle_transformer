@@ -1,3 +1,5 @@
+> fork from:https://github.com/jet-universe/particle_transformer.git
+
 # Particle Transformer
 
 This repo is the official implementation of "[Particle Transformer for Jet Tagging](https://arxiv.org/abs/2202.03772)". It includes the code, pre-trained models, and the JetClass dataset.
