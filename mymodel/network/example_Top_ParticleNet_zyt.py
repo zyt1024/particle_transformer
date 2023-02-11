@@ -7,7 +7,8 @@ path = os.path.dirname(os.path.dirname(__file__))
 print(path)
 sys.path.append(path)
 
-from ParticleNet_zyt import ParticleNet
+# from ParticleNet_zyt import ParticleNet
+from network.TopLand_ParticleNet import ParticleNet
 
 '''
 Link to the full model implementation:
@@ -36,13 +37,17 @@ def get_model(data_config, **kwargs):
     #**接受键值对的不定量参数，network_option
     pf_features_dims = len(data_config.input_dicts['pf_features'])
     num_classes = len(data_config.label_value)
+
+    print("input_dims = pf_features_dims = {len}\n".format(len = len(data_config.input_dicts['pf_features']) ))  # 7
+    print("num_classes = num_classes = {len}".format(len = len(data_config.label_value) ))                       # 2
+    
     model = ParticleNetWrapper(
         input_dims=pf_features_dims,
         num_classes=num_classes,
         conv_params=kwargs.get('conv_params', conv_params),
         fc_params=kwargs.get('fc_params', fc_params),
         use_fusion=kwargs.get('use_fusion', False),
-        use_fts_bn=kwargs.get('use_fts_bn', True),
+        use_fts_bn=kwargs.get('use_fts_bn', True),  # 输入之前先将数据归一化处理
         use_counts=kwargs.get('use_counts', True),  # 是否使用counts
         for_inference=kwargs.get('for_inference', False)
     )
@@ -54,6 +59,7 @@ def get_model(data_config, **kwargs):
         'dynamic_axes': {**{k: {0: 'N', 2: 'n_' + k.split('_')[0]} for k in data_config.input_names}, **{'softmax': {0: 'N'}}},
     }
 
+    print("------------------modify-------")
     return model, model_info
 
 

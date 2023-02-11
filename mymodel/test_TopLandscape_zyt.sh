@@ -24,7 +24,8 @@ modelName=$1
 extraopts=""
 if [[ $modelName == "PN" ]]; then
     # modelopts="../networks/example_ParticleNet.py"
-    modelopts="example_ParticleNet_zyt.py"
+    # modelopts="example_ParticleNet_zyt.py"
+    modelopts="./network/example_Top_ParticleNet_zyt.py"
     lr="1e-2"
 else
     echo "Invalid model $modelName!"
@@ -81,7 +82,7 @@ python weaver/train.py --predict --data-test "${DATADIR}/test_file.parquet" \
  --network-config $modelopts \
  --model-prefix ./test/net_best_epoch_state.pt \
  --gpus "0" --predict-gpus "0" \
- --batch-size 512 \
+ --batch-size 2 \
  --predict-output ./test/output.root \
  # 利用哪个模型进行推理
 

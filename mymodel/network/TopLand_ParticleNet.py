@@ -12,19 +12,32 @@ import numpy as np
 import torch
 import torch.nn as nn
 import time
+from weaver.utils.logger import _logger, _configLogger
+import sys
+stdout = sys.stdout
+_configLogger('weaver', stdout=stdout, filename="infer_log.log")
+import numpy as np
+torch.set_printoptions(threshold=np.inf)   # 配置打印的时候不显示省略号
 
-def knn(x, k):
+def knn(x, k): # x(N, 2, 128)  k=6
+    # _logger.info("knn,x={x}".format(x=x[0,:,:]))
     inner = -2 * torch.matmul(x.transpose(2, 1), x)
     xx = torch.sum(x ** 2, dim=1, keepdim=True)
     pairwise_distance = -xx - inner - xx.transpose(2, 1)
+    
     idx = pairwise_distance.topk(k=k + 1, dim=-1)[1][:, :, 1:]  # (batch_size, num_points, k)
+    
+    # _logger.info("idx,idx={idx}".format(idx=idx[0,:,:]))
+
     return idx
 
 
 # v1 is faster on GPU
 def get_graph_feature_v1(x, k, idx):
     batch_size, num_dims, num_points = x.size()
-
+    _logger.info("num_dims={num_dims}".format(num_dims=num_dims))
+    _logger.info("num_points={num_points}".format(num_points=num_points))
+    _logger.info("x.size()={x}".format(x=x.size()))
     idx_base = torch.arange(0, batch_size, device=x.device).view(-1, 1, 1) * num_points
     idx = idx + idx_base
     idx = idx.view(-1)
@@ -39,7 +52,7 @@ def get_graph_feature_v1(x, k, idx):
 
 # v2 is faster on CPU
 def get_graph_feature_v2(x, k, idx):
-    batch_size, num_dims, num_points = x.size()
+    batch_size, num_dims, num_points = x.size() # torch.Size([512, 7, 128]) torch.Size([512, 7, 128]) torch.Size([512, 7, 128])
 
     idx_base = torch.arange(0, batch_size, device=x.device).view(-1, 1, 1) * num_points
     idx = idx + idx_base
@@ -50,7 +63,7 @@ def get_graph_feature_v2(x, k, idx):
     fts = fts.transpose(1, 0).contiguous()  # (batch_size, num_dims, num_points, k)
 
     x = x.view(batch_size, num_dims, num_points, 1).repeat(1, 1, 1, k)
-    fts = torch.cat((x, fts - x), dim=1)  # ->(batch_size, 2*num_dims, num_points, k)
+    fts = torch.cat((x, fts - x), dim=1)  # ->(batch_size, 2*num_dims, num_points, k) # torch.Size([512, 14, 128,16])
 
     return fts
 
@@ -83,7 +96,9 @@ class EdgeConvBlock(nn.Module):
 
         self.convs = nn.ModuleList()
         for i in range(self.num_layers):
-            self.convs.append(nn.Conv2d(2 * in_feat if i == 0 else out_feats[i - 1], out_feats[i], kernel_size=1, bias=False if self.batch_norm else True))
+            # self.convs.append(nn.Conv2d(2 * in_feat if i == 0 else out_feats[i - 1], out_feats[i], kernel_size=1, bias=False if self.batch_norm else True))
+            self.convs.append(nn.Conv2d(2 * in_feat if i == 0 else out_feats[i - 1], out_feats[i], kernel_size=1, bias=False))
+
 
         # if batch_norm:
         #     self.bns = nn.ModuleList()
@@ -92,19 +107,23 @@ class EdgeConvBlock(nn.Module):
 
         self.bns = nn.ModuleList()
         for i in range(self.num_layers):
-            self.bns.append(nn.BatchNorm2d(out_feats[i]))
+            self.bns.append(nn.BatchNorm2d(out_feats[i])) # ()
 
         # if activation:
         self.acts = nn.ModuleList()
         for i in range(self.num_layers):
             self.acts.append(nn.ReLU())
 
-        if in_feat == out_feats[-1]:
-            self.sc = None # 如果输入通道和输出通道相同就不需要了,本次模型一直没设置
-        else:
-            self.sc = nn.Conv1d(in_feat, out_feats[-1], kernel_size=1, bias=False)
-            self.sc_bn = nn.BatchNorm1d(out_feats[-1])
+        # if in_feat == out_feats[-1]:
+        #     self.sc = None # 如果输入通道和输出通道相同就不需要了,本次模型一直没设置
+        # else:
+        #     self.sc = nn.Conv1d(in_feat, out_feats[-1], kernel_size=1, bias=False)
+        #     self.sc_bn = nn.BatchNorm1d(out_feats[-1])
 
+        
+        # shot up 
+        self.sc = nn.Conv1d(in_feat, out_feats[-1], kernel_size=1, bias=False)
+        self.sc_bn = nn.BatchNorm1d(out_feats[-1])
         # if activation:
         #     self.sc_act = nn.ReLU()
 
@@ -112,26 +131,45 @@ class EdgeConvBlock(nn.Module):
 
     def forward(self, points, features):
 
+        _logger.info("points:{points},shape:{shape}".format(points=points,shape=points.shape))
         topk_indices = knn(points, self.k)   # 计算距离，找出最近的K个点
-        x = self.get_graph_feature(features, self.k, topk_indices) #
+        x = self.get_graph_feature(features, self.k, topk_indices) #  将最近的K个点和feature构造为输入数据
 
-        for conv, bn, act in zip(self.convs, self.bns, self.acts):
-            x = conv(x)  # (N, C', P, K)
-            if bn:
-                x = bn(x)
-            if act:
-                x = act(x)
+        _logger.info("top_k_indices:{val}top_k_indices.shape:{shape}".format(val=topk_indices,shape=topk_indices.shape))
+        _logger.info("x.shape:{shape}".format(shape=x.shape))
+        # for conv, bn, act in zip(self.convs, self.bns, self.acts):
+        #     x = conv(x)  # (N, C', P, K)
+        #     if bn:
+        #         x = bn(x)
+        #     if act:
+        #         x = act(x)
+
+        # 将for循环展开
+        x = self.convs[0](x)
+        x = self.bns[0](x)
+        x = self.acts[0](x)
+
+        x = self.convs[1](x)
+        x = self.bns[1](x)
+        x = self.acts[1](x)
+
+        x = self.convs[2](x)
+        x = self.bns[2](x)
+        x = self.acts[2](x)
 
         fts = x.mean(dim=-1)  # (N, C, P)
 
         # shortcut
-        if self.sc:
-            sc = self.sc(features)  # (N, C_out, P)
-            sc = self.sc_bn(sc)
-        else:
-            sc = features
+        # if self.sc:
+        #     sc = self.sc(features)  # (N, C_out, P)
+        #     sc = self.sc_bn(sc)
+        # else:
+        #     sc = features
 
-        return self.sc_act(sc + fts)  # (N, C_out, P)
+        sc = self.sc(features)  # (N, C_out, P)
+        sc = self.sc_bn(sc)
+        
+        return self.sc_act(sc + fts)  # (N, C_out, P) # 两个加在一起聚合
 
 
 class ParticleNet(nn.Module):
@@ -150,10 +188,12 @@ class ParticleNet(nn.Module):
         super(ParticleNet, self).__init__(**kwargs)
 
         self.use_fts_bn = use_fts_bn
-        if self.use_fts_bn:
-            self.bn_fts = nn.BatchNorm1d(input_dims)
+        # if self.use_fts_bn: # 默认为True
+        #     self.bn_fts = nn.BatchNorm1d(input_dims)
+        self.bn_fts = nn.BatchNorm1d(input_dims)
 
-        self.use_counts = use_counts
+
+        self.use_counts = use_counts # 为True
 
         self.edge_convs = nn.ModuleList()
         for idx, layer_param in enumerate(conv_params):
@@ -194,42 +234,79 @@ class ParticleNet(nn.Module):
         self.for_inference = for_inference
 
     def forward(self, points, features, mask=None):
-        print('\npoints:\n', points.shape)
-        print('features:\n', features.shape)
-        print('mask:\n', mask.shape)
+
+        print("\n")
+        _logger.info("points.shape: {point}".format(point=points.shape))
+        _logger.info("features.shape: {features}".format(features=features.shape))
+        _logger.info("mask.shape: {mask}".format(mask=mask.shape))
+
         # if mask is None:  # 针对于此数据集、可取消
         #     print("==================mask is None=========================")
         #     mask = (features.abs().sum(dim=1, keepdim=True) != 0)  # (N, 1, P)
+        
         points *= mask
         features *= mask
         coord_shift = (mask == 0) * 1e9
-        if self.use_counts:
-            counts = mask.float().sum(dim=-1)
-            counts = torch.max(counts, torch.ones_like(counts))  # >=1
+        # if self.use_counts:
+        #     counts = mask.float().sum(dim=-1)
+        #     counts = torch.max(counts, torch.ones_like(counts))  # >=1
+
+        counts = mask.float().sum(dim=-1)
+        counts = torch.max(counts, torch.ones_like(counts))  # >=1
+
+        # _logger.info("coord_shift: {coord_shift}".format(coord_shift=coord_shift))
+        _logger.info("counts.shape: {counts}".format(counts=counts.shape))
 
         # if self.use_fts_bn: # 为TRUE
         #     fts = self.bn_fts(features) * mask
         # else:
         #     fts = features
-        fts = self.bn_fts(features) * mask
+        
+        #self.bn_fts = nn.BatchNorm1d(input_dims)
+        fts = self.bn_fts(features) * mask  # 先将feature做了一次归一化处理
+
+
         outputs = []
-        for idx, conv in enumerate(self.edge_convs):
-            pts = (points if idx == 0 else fts) + coord_shift
-            fts = conv(pts, fts) * mask
-            if self.use_fusion:
-                outputs.append(fts)
-        if self.use_fusion:
-            fts = self.fusion_block(torch.cat(outputs, dim=1)) * mask
+        # for idx, conv in enumerate(self.edge_convs):
+        #     pts = (points if idx == 0 else fts) + coord_shift
+        #     fts = conv(pts, fts) * mask
+            # if self.use_fusion:
+            #     outputs.append(fts)
+
+        """ 将for 展开 """
+        #第一个EdgeConvBlock
+        pts = points + coord_shift
+
+        _logger.info("第一个EdgeConvBlock:(pts={pts},fts={fts})".format(pts=pts.shape,fts=fts.shape))
+        fts = self.edge_convs[0](pts, fts) * mask
+
+        #第二个EdgeConvBlock
+        pts = fts + coord_shift
+        fts = self.edge_convs[1](pts, fts) * mask      
+
+        #第三个EdgeConvBlock
+        pts = fts + coord_shift
+        fts = self.edge_convs[2](pts, fts) * mask     
+
+
+
+
+        # if self.use_fusion:
+        #     fts = self.fusion_block(torch.cat(outputs, dim=1)) * mask
 
 #         assert(((fts.abs().sum(dim=1, keepdim=True) != 0).float() - mask.float()).abs().sum().item() == 0)
         
-        if self.for_segmentation:
-            x = fts
-        else:
-            if self.use_counts:
-                x = fts.sum(dim=-1) / counts  # divide by the real counts
-            else:
-                x = fts.mean(dim=-1)
+        # if self.for_segmentation:
+        #     x = fts
+        # else:
+        #     if self.use_counts:
+        #         x = fts.sum(dim=-1) / counts  # divide by the real counts
+        #     else:
+        #         x = fts.mean(dim=-1)
+
+        x = fts.sum(dim=-1) / counts
+
+        _logger.info("fts.sum(dim=-1).shape: {fts}".format(fts=fts.sum(-1).shape))
 
         output = self.fc(x)
         if self.for_inference:

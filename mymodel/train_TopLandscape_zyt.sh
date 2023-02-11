@@ -22,9 +22,13 @@ echo "suffix=$suffix"
 
 modelName=$1
 extraopts=""
-if [[ $modelName == "PN" ]]; then
+
+[[ -z $modelName ]] && modelName="PN" #若modelName为空则默认为PN
+
+if [[ $modelName == "PN" ]]; then 
     # modelopts="../networks/example_ParticleNet.py"
-    modelopts="example_ParticleNet_zyt.py"
+    # modelopts="example_ParticleNet_zyt.py"
+    modelopts="./network/example_Top_ParticleNet_zyt.py"
     lr="1e-2"
 else
     echo "Invalid model $modelName!"
@@ -32,7 +36,7 @@ else
 fi
 
 # "kin" 默认为kin, 只有输入
-FEATURE_TYPE=$2
+FEATURE_TYPE=$2 
 [[ -z ${FEATURE_TYPE} ]] && FEATURE_TYPE="kin"
 if [[ "${FEATURE_TYPE}" != "kin" ]]; then
     echo "Invalid feature type ${FEATURE_TYPE}!"
