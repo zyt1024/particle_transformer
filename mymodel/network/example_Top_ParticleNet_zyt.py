@@ -8,7 +8,8 @@ print(path)
 sys.path.append(path)
 
 # from ParticleNet_zyt import ParticleNet
-from network.TopLand_ParticleNet import ParticleNet
+# from network.TopLand_ParticleNet import ParticleNet
+from network.TopLand_ParticleNet_simple_best import ParticleNet
 
 '''
 Link to the full model implementation:
@@ -60,8 +61,13 @@ def get_model(data_config, **kwargs):
     }
 
     print("------------------modify-------")
-    return model, model_info
 
+    # 加载量化后的模型
+    # model.qconfig = torch.quantization.get_default_qconfig('fbgemm')
+    # model_fp32_prepared = torch.quantization.prepare(model)
+    # model_int8 = torch.quantization.convert(model_fp32_prepared)
+    return model, model_info
+    # return model_int8, model_info
 
 def get_loss(data_config, **kwargs):
     return torch.nn.CrossEntropyLoss()

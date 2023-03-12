@@ -96,9 +96,9 @@ class EdgeConvBlock(nn.Module):
 
         self.convs = nn.ModuleList()
         for i in range(self.num_layers):
-            # self.convs.append(nn.Conv2d(2 * in_feat if i == 0 else out_feats[i - 1], out_feats[i], kernel_size=1, bias=False if self.batch_norm else True))
-            self.convs.append(nn.Conv2d(2 * in_feat if i == 0 else out_feats[i - 1], out_feats[i], kernel_size=1, bias=False))
-
+            self.convs.append(nn.Conv2d(2 * in_feat if i == 0 else out_feats[i - 1], out_feats[i], kernel_size=1, bias=False if self.batch_norm else True))
+            # self.convs.append(nn.Conv2d(2 * in_feat if i == 0 else out_feats[i - 1], out_feats[i], kernel_size=1, bias=False))
+        _logger.info("if self.batch_norm else True===={batch_norm}".format(batch_norm=self.batch_norm))
 
         # if batch_norm:
         #     self.bns = nn.ModuleList()
@@ -131,11 +131,11 @@ class EdgeConvBlock(nn.Module):
 
     def forward(self, points, features):
 
-        _logger.info("points:{points},shape:{shape}".format(points=points,shape=points.shape))
+        # _logger.info("points:{points},shape:{shape}".format(points=points,shape=points.shape))
         topk_indices = knn(points, self.k)   # 计算距离，找出最近的K个点
         x = self.get_graph_feature(features, self.k, topk_indices) #  将最近的K个点和feature构造为输入数据
 
-        _logger.info("top_k_indices:{val}top_k_indices.shape:{shape}".format(val=topk_indices,shape=topk_indices.shape))
+        # _logger.info("top_k_indices:{val}top_k_indices.shape:{shape}".format(val=topk_indices,shape=topk_indices.shape))
         _logger.info("x.shape:{shape}".format(shape=x.shape))
         # for conv, bn, act in zip(self.convs, self.bns, self.acts):
         #     x = conv(x)  # (N, C', P, K)
@@ -145,7 +145,11 @@ class EdgeConvBlock(nn.Module):
         #         x = act(x)
 
         # 将for循环展开
-        x = self.convs[0](x)
+
+        # 替换掉这一个卷积
+        x = self.convs[0](x) #根据输入的维度进行判断
+        _logger.info("conv[0].x.shape:{shape}".format(shape=x.shape))
+        
         x = self.bns[0](x)
         x = self.acts[0](x)
 

@@ -80,9 +80,9 @@ echo "=======test =========="
 python weaver/train.py --predict --data-test "${DATADIR}/test_file.parquet" \
  --data-config ../data/TopLandscape/top_${FEATURE_TYPE}.yaml \
  --network-config $modelopts \
- --model-prefix ./test/net_best_epoch_state.pt \
- --gpus "0" --predict-gpus "0" \
- --batch-size 2 \
+ --model-prefix ./test/best_simple/net_best_epoch_state.pt \
+ --gpus "" --predict-gpus "" \
+ --batch-size 1 \
  --predict-output ./test/output.root \
  # 利用哪个模型进行推理
 
