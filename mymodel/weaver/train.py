@@ -298,6 +298,8 @@ def test_load(args):
         filelist = file_dict[name]
         _logger.info('Running on test file group %s with %d files:\n...%s', name, len(filelist), '\n...'.join(filelist))
         num_workers = min(args.num_workers, len(filelist))
+
+        print("----------------------------",num_workers,"\n",args," ",type(args),filelist,file_dict,"aaa=",name,"----------------------------------")
         test_data = SimpleIterDataset({name: filelist}, args.data_config, for_training=False,
                                       extra_selection=args.extra_test_selection,
                                       load_range_and_fraction=((0, 1), args.data_fraction),
@@ -306,7 +308,8 @@ def test_load(args):
         test_loader = DataLoader(test_data, num_workers=num_workers, batch_size=args.batch_size, drop_last=False,
                                  pin_memory=True)
         return test_loader
-
+    
+    # functools.partial(get_test_loader, name) 调用get_test_loader函数并传参
     test_loaders = {name: functools.partial(get_test_loader, name) for name in file_dict}
     data_config = SimpleIterDataset({}, args.data_config, for_training=False).config
     return test_loaders, data_config
@@ -699,7 +702,8 @@ def _main(args):
         data_loader = train_loader if training_mode else list(test_loaders.values())[0]()
         iotest(args, data_loader)
         return
-
+    
+    print(data_config,"--------------------------------\n",args)
     model, model_info, loss_func = model_setup(args, data_config)
 
     # TODO: load checkpoint
@@ -770,6 +774,7 @@ def _main(args):
                     model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)) else model.state_dict()
                 torch.save(state_dict, args.model_prefix + '_epoch-%d_state.pt' % epoch)
                 torch.save(opt.state_dict(), args.model_prefix + '_epoch-%d_optimizer.pt' % epoch)
+            
             # if args.backend is not None and local_rank == 0:
             # TODO: save checkpoint
             #     save_checkpoint()

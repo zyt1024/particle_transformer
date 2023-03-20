@@ -12,7 +12,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 import time
-
+import sys
+import os
+torch.set_printoptions(threshold=sys.maxsize)
 def knn(x, k):
     
     inner = -2 * torch.matmul(x.transpose(2, 1), x)
@@ -154,12 +156,19 @@ class ParticleNet(nn.Module):
         self.for_inference = for_inference
 
     def forward(self, points, features, mask=None):
+        index = 0
         print('\npoints:\n', points.shape,points.type())
         print('features:\n', features.shape,features.type())
         print('mask:\n', mask.shape,mask.type())
         # if mask is None:  # 针对于此数据集、可取消
         #     print("==================mask is None=========================")
         #     mask = (features.abs().sum(dim=1, keepdim=True) != 0)  # (N, 1, P)
+        if not os.path.exists('/home/atzyt/Project/myparticle/particle_transformer/mymodel/network/data/data.txt'):
+            with open('/home/atzyt/Project/myparticle/particle_transformer/mymodel/network/data/data.txt', 'a+') as f:  # 设置文件对象
+                print(points,file = f)
+                print(features,file = f)
+                print(mask,file = f)
+ 
         points *= mask
         features *= mask
         coord_shift = (mask == 0) * 1e9
@@ -173,12 +182,17 @@ class ParticleNet(nn.Module):
 
         # 生成与counts相同形状的张量,并且将>=1的取出
         counts = torch.max(counts, torch.ones_like(counts))  # >=1
-
+        print('counts:\n', counts.shape)
         # if self.use_fts_bn: # 为TRUE
         #     fts = self.bn_fts(features) * mask
         # else:
         #     fts = features
-        
+        if not os.path.exists('/home/atzyt/Project/myparticle/particle_transformer/mymodel/network/data/data_res.txt'):
+            with open('/home/atzyt/Project/myparticle/particle_transformer/mymodel/network/data/data_res.txt', 'a+') as f:  # 设置文件对象
+                print(points,file = f)
+                print(features,file = f)
+                print(coord_shift,file = f)
+                print(counts,file = f)
 
         outputs = []
         # for idx, conv in enumerate(self.edge_convs):
@@ -195,6 +209,11 @@ class ParticleNet(nn.Module):
         print("fts000=",fts)
         print("pts000=",pts)
         print("edge1:",fts.shape,pts.shape)
+
+        if not os.path.exists('/home/atzyt/Project/myparticle/particle_transformer/mymodel/network/data/data_input.txt'):
+            with open('/home/atzyt/Project/myparticle/particle_transformer/mymodel/network/data/data_input.txt', 'a+') as f:  # 设置文件对象
+                print("edconv0_points_input\n",pts,file = f)
+                print("edconv0_fts_input",fts,file = f)
         #edge1: torch.Size([1, 7, 128]) torch.Size([1, 2, 128])
         # pts = point
         # fts = features
@@ -210,14 +229,20 @@ class ParticleNet(nn.Module):
         x = self.edge_convs0_ac1(self.edge_convs0_bn1(self.edge_convs0_conv1(x)))
         x = self.edge_convs0_ac2(self.edge_convs0_bn2(self.edge_convs0_conv2(x)))
         
-        # x.shape => NCHW (1,64,128,16)
+        # x.shape => NCHW (1,64,128,16) 
         print("edge0 x=",x.shape)
-        x = x.mean(dim=-1)  # 最后一维求均值
+        x = x.mean(dim=-1)  # 从1,64,128,16  => 1,64,128 最后一维求均值
+        print("均值结果 juhe fts",x)
         # shortcut  输入1*7*128
         sc = self.edge_convs0_shot_bn(self.edge_convs0_shot_conv(fts))
         print("edge0 sc,x",sc.shape,x.shape)
         #sc:torch.Size([1, 64, 128])  x:torch.Size([1, 64, 128])
+        if not os.path.exists('/home/atzyt/Project/myparticle/particle_transformer/mymodel/network/data/data_edconv0_sc.txt'):
+            with open('/home/atzyt/Project/myparticle/particle_transformer/mymodel/network/data/data_edconv0_sc.txt', 'a+') as f:  # 设置文件对象
+                print("edconv0_sc\n",sc,file = f)  
         fts = self.edge_convs0_shot_ac(sc + x) * mask
+        # print("edge0 juhe fts",fts)
+        # print()
         end_edge_1 = time.time()
 
         # 第一层Edconv结束
@@ -235,9 +260,10 @@ class ParticleNet(nn.Module):
         x = self.edge_convs1_ac2(self.edge_convs1_bn2(self.edge_convs1_conv2(x)))
         
         x = x.mean(dim=-1)
-        # shortcut
+        # shortcut  卷积+batchnorm
         sc = self.edge_convs1_shot_bn(self.edge_convs1_shot_conv(fts))
 
+        # 求和 + relu激活
         fts = self.edge_convs1_shot_ac(sc + x) * mask
         # fts = self.edge_convs[1](pts, fts) * mask      
         end_edge_2 = time.time()
@@ -265,6 +291,8 @@ class ParticleNet(nn.Module):
         x = fts.sum(dim=-1) / counts
         
         output = self.fc(x)
+
+        end_fc = time.time()
         if self.for_inference:
             output = torch.softmax(output, dim=1)
         # print('output============:\n', output)
@@ -273,6 +301,8 @@ class ParticleNet(nn.Module):
         print("edge_conv1: ",end_edge_1-start_edge_1)
         print("edge_conv2: ",end_edge_2-start_edge_2)
         print("edge_conv3: ",end_edge_3-start_edge_3)      
+        print("fc:",end_fc - end_edge_3)
         print("all:",end_edge_3 - start_edge_1) 
+        index = index + 1
         return output
 
